@@ -1,0 +1,26 @@
+{{define "header"}}
+<!DOCTYPE html>
+<html class="has-navbar-fixed-top">
+  <head>
+    <title>{{ .Title }}</title>
+    {{range .CSS}}
+    <link rel="stylesheet" href="{{.}}">
+  </head>
+  {{end}}
+
+  <body style="background: #f4f4f4">
+    <nav class="navbar is-fixed-top" role="navigation" aria-label="main navigation" style="border-bottom: 1px solid #eee">
+      <div class="navbar-brand" style="align-items: flex-start !important;">
+        <a class="navbar-item" href="#">
+          <h1 style="font-weight: bolder; font-size: 20px;">Gamblr</h1>
+        </a>
+
+      </div>
+          <!-- <a role="button" aria-label="menu" aria-expanded="false">
+            <span class="icon is-large">
+              <i class="fas fa-options"></i>
+            </span>
+          </a> -->
+    </nav>
+  
+{{end}}

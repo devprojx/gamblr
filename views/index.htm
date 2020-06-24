@@ -1,0 +1,251 @@
+{{define "games"}}
+{{template "header" .}}
+<style>
+
+</style>
+<body> 
+  <div id="settingsModal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+     
+      <section class="modal-card-body">
+        <p class="modal-card-title mb-4">Options 
+          <!-- <div class="field" style="float:right; margin-top:-40px">
+            <div class="control">
+              <label class="checkbox">
+                <input type="checkbox">
+                Send Me Notification
+              </label>
+            </div>
+          </div> -->
+        </p>
+      
+        <label for="">Games To Display</label>
+        <div id="gameDisplaySettings" class="pl-4 pt-2 pb-4">
+
+        </div>
+        <div style="float: right">
+          <button class="button is-primary" onclick="settingsModal.save()">Save and Exit</button>
+          <button class="button" onclick="settingsModal.close()">Cancel</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="container pt-2" style="height: 100vh">
+    <button onclick="settingsModal.open()" class="button is-outlined is-rounded" style="border: 2px solid #ccc;z-index: 99999; position: fixed; bottom: 10px; right:10px">
+      <span class="icon is-small">
+        <i class="fas fa-cog"></i>
+      </span>
+    </button>
+    <div class="columns is-centered">
+      <div class="field column is-half">
+        <p class="control has-icons-left has-icons-right">
+          <input class="input is-rounded" id="gameSearch" type="text" onkeyup="searchHandler()" placeholder="Search">
+          <span class="icon is-small is-left">
+            <i class="fas fa-search"></i>
+          </span>
+        </p>
+      </div>
+      
+    </div>
+    <div id="pageLoader" class="columns is-centered is-vcentered pl-6 pr-6">
+      <div class="field column is-half">
+        <progress class="progress is-info" max="100">60%</progress>
+      </div>
+    </div>
+    <div class="columns is-multiline" id="gameContainer">
+     
+    </div>
+  
+  </div>
+</body>
+{{template "js" .}}
+<script type="text/javascript">
+  var sock = null;
+  var wsuri = "ws://127.0.0.1:1234";
+  let games = []
+  let pageLoader = {
+    id: 'pageLoader',
+    show: function () {
+      document.getElementById(this.id).classList.remove("is-hidden")
+    },
+    hide: function () {
+      document.getElementById(this.id).classList.add("is-hidden")
+    }
+  }
+  let settingsModal = {
+    id: 'settingsModal',
+    close: function () {
+      document.getElementById(this.id).classList.remove("is-active")
+    },
+    open: async function (){
+      await initSettings()
+      document.getElementById(this.id).classList.add("is-active")
+    },
+    save: async function() {
+      let container = document.getElementById('gameDisplaySettings')
+      let gameContainers = document.querySelectorAll('.game-cards')
+      let selectedGames = []
+      container.querySelectorAll('.game-settings-item').forEach((el)=>{
+        if(el.checked) {
+          selectedGames.push(el.getAttribute('id').replace("checkbox-", "").trim())
+        }
+      })
+
+      gameContainers.forEach((el)=>{
+        let name = el.querySelector('.card').getAttribute('id').replace("-container", "").trim()
+        if(selectedGames.includes(name))  {
+          el.classList.remove('is-hidden')
+        } else {
+          el.classList.add('is-hidden') 
+          el.classList.add('false')
+        }
+      })
+      
+      await saveSettings(JSON.stringify({
+        gamesToDisplay: selectedGames
+      }))
+
+      this.close()
+    }
+  }
+
+  window.onload = function() {
+
+      sock = new WebSocket(wsuri);
+
+      sock.onopen = function() {
+        
+        console.log("connected to " + wsuri);
+      }
+
+      sock.onclose = function(e) {
+        console.log("connection closed (" + e.code + ")");
+      }
+
+      sock.onmessage = async function(e) {
+        pageLoader.show()
+        let data = JSON.parse(e.data)
+        let game = games.find((el) => el.Name === data.Name)
+        if(game) {
+          updateGameCard(data)
+        } else {
+          renderGameCard(data)
+          games.push(data)
+        }
+        await initSettings()
+        pageLoader.hide()
+      }
+  };
+
+  async function initSettings(){
+    try {
+      let settingsStr =  await loadSettings()
+      let settings = {}
+      
+      try {
+        settings = JSON.parse(settingsStr || {})
+      } catch (e) {
+        console.log('[error]: unable to parse settings')
+      }
+
+      //display games
+      let selectedGames = settings.gamesToDisplay || []
+
+      let html = '';
+      for(let game of games) {
+        let found = selectedGames.includes(game.Name.trim())
+        html +=` <div class="field">
+          <div class="control">
+            <label class="checkbox">
+              <input class="game-settings-item" id="checkbox-${game.Name.trim()}" type="checkbox" ${ found ? "checked" : ""}>
+              ${game.Name}
+            </label>
+          </div>
+        </div>` 
+
+        let gameContainer =  document.querySelector(`.game-card-${game.Name.trim()}`)
+        let name = gameContainer.querySelector('#name').textContent
+        if(selectedGames.includes(name.trim()))  {
+          gameContainer.classList.remove('is-hidden')
+        } else {
+          gameContainer.classList.add('is-hidden')
+          gameContainer.classList.add('false')
+        }
+      }   
+      document.getElementById('gameDisplaySettings').innerHTML = html
+    } catch (error) {
+      
+    }
+  }
+
+  function searchHandler() {
+    let val = document.getElementById('gameSearch').value
+    document.querySelectorAll('.game-cards').forEach((el)=> {
+      let isSearachable = !el.classList.contains('false');
+      if (!isSearachable)  return
+      let name = (el.querySelector('#name').textContent || "").trim().toLowerCase()
+      let search = (val || "").toLowerCase()
+
+      if(name.indexOf(search) != -1) {
+        el.classList.remove('is-hidden')
+      } else {
+        el.classList.add('is-hidden')
+      }
+    })
+  }
+
+  function renderGameCard(game) {
+    let div = document.createElement('div')
+    div.innerHTML = `
+      <div class="card" id="${game.Name}-container">
+          <div class="card-content">
+            <h2 class="has-text-weight-bold" id="name">
+              ${game.Name}
+            </h2>
+            <p class="subtitle" style="font-size: 12px;" id="timeOfDay">${game.TimeOfDay}</p>
+            <div class="content" style="text-align: center">
+              
+                <figure class="image is-128x128" style="margin: 0 auto !important">
+                  <img src="${game.ImageURL}">
+                </figure>
+                <span  id="results">
+                ${game.Results.map((r)=>{
+                 return `<span style="font-weight: bold; margin-left: 5px">${r}</span>`
+                }).join(' ')}
+                </span>
+                <span id="bonusBall" style="font-weight: bold; margin-left: 5px; border-bottom: 1px solid #444;">${game.BonusBall}</span>
+                <p id="description">${game.Description}</p>
+            </div>
+            <footer class="card-footer pb-0">
+              <p class="card-footer-item pb-0">
+                <span id="date">
+                  ${game.Date}
+                </span>
+              </p>
+            </footer>
+          </div>
+        </div>
+    `
+    div.className = `column is-one-quarter game-cards game-card-${game.Name.trim()}`
+    document.querySelector(`#gameContainer`).append(div)
+  }
+
+  function updateGameCard(game) {
+    let container =  document.querySelector(`#${game.Name}-container`)
+    container.querySelector(`#timeOfDay`).textContent = game.TimeOfDay
+    container.querySelector(`#results`).innerHTML = `
+      ${game.Results.map((r)=>{
+        return `<span style="font-weight: bold; margin-left: 5px">${r}</span>`
+      }).join(' ')}
+    `
+    
+    container.querySelector(`#date`).textContent = game.Date
+    container.querySelector(`#description`).textContent = game.Description
+    container.querySelector(`#bonusBall`).textContent = game.BonusBall
+  }
+
+</script>
+{{template "footer" .}}
+{{end}}
